@@ -1,3 +1,4 @@
+#=useful source: https://github.com/JuliaLang/julia/blob/master/test/perf/kernel/raytracer.jl=#
 using ImmutableArrays # useful library for fast matrix manipulations
 
 type Ray # the ray type
