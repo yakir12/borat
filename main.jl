@@ -12,12 +12,12 @@ type Lens
     rig::Function
 end
 
-const step = 1e-3 # step size
-const rad = pi
-const n1 = 1.34
-const n2 = 1.55
+const step = 1e-5 # step size
+const rad = 1.
+const n_periphery = 1.34
+const n_center = 1.55
 
-rig(r::Float64) = (n2-n1)*(rad-r).*(rad+r)/rad^2+n1
+rig(r::Float64) = (n_center-n_periphery)*(rad-r).*(rad+r)/rad^2+n_periphery
 
 function initiate(o::Array{Float64},d::Array{Float64})
     # just a utility function to declare a ray
@@ -28,20 +28,28 @@ end
     
  
 function advance!(r::Ray,l::Lens)
-    # simple but useful
     N = unit(r.pos)
-    alpha1 = acos(dot(N,r.dir)/norm(N)/norm(r.dir))
-    alpha2 = n1*sin(alpha1)/n2
+    a = dot(-r.dir,N)
+    n1 = l.rig(norm(r.pos))
+    n2 = l.rig(norm(r.pos + step*r.dir))
+    n = n1/n2
+    c = 1. - n^2(1.-a^2)
+    if c < 0
+        c = abs(c)
+    end
+
+    t = n*r.dir + (n*a - sqrt(c))*N
+    r.dir = unit(t)
     r.pos += step*r.dir
 end
 
-r1 = initiate([0.,0.,rad],[0.,0.,-1.]) # start a ray at 0,0,0 and give it some direction
+r1 = initiate([.5,.5,.5],[0.,0.,-1.]) # start a ray at 0,0,0 and give it some direction
 p1 = {r1.pos}
 l = Lens(Vector3([0.,0.,0.]),rad,rig)
-advance!(r1)
+advance!(r1,l)
 push!(p1,r1.pos)
-while norm(r1.pos) < l.rad
-    advance!(r1)
+while (norm(r1.pos) < l.rad) & (length(p1) < 1e6)
+    advance!(r1,l)
     push!(p1,r1.pos)
 end
 
