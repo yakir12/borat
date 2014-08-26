@@ -1,0 +1,2 @@
+a ray tracer programmed in Julia: https://github.com/JuliaLang/julia/blob/master/test/perf/kernel/raytracer.jl
+a pdf with some ray tracing instructions: http://fileadmin.cs.lth.se/cs/Education/EDAN30/lectures/S1-rt.pdf
