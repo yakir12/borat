@@ -20,24 +20,70 @@ const n_periphery = 1.34 # the refractive index at the periphery of the lens, so
 const n_center = 1.35 # the refractive index at the center of the lens, when the distance from the lens center is equal to zero
 
 #=Now come the functions=#
-rig(r::Float64) = (n_center-n_periphery)*(rad-r)*(rad+r)/rad^2+n_periphery # this is the RIG function. Notice that its argument is of type Float64. It's just a parabula. Could be anything else really. It looks the way it does to make sure that it's a concave parabula with a n_center at r=0 and n_periphery at r=rad. this can be optimized a bit by pre calculating parts of that equation
+# this is the RIG function. Notice that its argument is of type Float64. 
+# It's just a parabola. Could be anything else really. 
+# It looks the way it does to make sure that it's a concave parabula with a n_center at r=0 
+# and n_periphery at r=rad. this can be optimized a bit by pre calculating parts of that equation
+rig(r::Float64) = (n_center-n_periphery)*(rad-r)*(rad+r)/rad^2+n_periphery
+
 
 function initiate(o::Array{Float64},d::Array{Float64}) # just a utility function to declare a ray. This is useful cause we can declare rays using a 3 element arrays (which isn't YET a Vector3D type), plus it takes care of the unitization of the direction vector
     r = Ray(Vector3(o),unit(Vector3(d)))
 end
 
-function advance!(r::Ray,l::Lens) # this is the main function that advances the ray along its path inside the lens. Everything happens here, and in fact too much does. It would be better if we'd brake it apart into logical segments. The algorithm is taken directly from page 74 in the S1-rt.pdf file I got from http://fileadmin.cs.lth.se/cs/Education/EDAN30/lectures/S1-rt.pdf in that website your graphics guy gave you (i.e. http://cs.lth.se/english/course/edan30-photorealistic-computer-graphics/assignments/). I'll refer to that page during the comments below. Notice that I didn't shifted the system to the lens center as I should. Since it's at 0,0 it doens't matter, but this should be included.
-    costheta = dot(r.dir,r.pos) # here I find out if the ray is entering or exiting the lens (is it on it's way in or way out). If its distance to the lens center is diminishing then the normal to the refractive surface is going outwards. but if the ray is leaving the lens the normal to the surface is pointing inwards.
-    out = -sign(costheta) # is it going out? if so make out equal to +1, otherwise make it -1
-    N = out*unit(r.pos) # this is the normal to the refractive surface
-    a = dot(-r.dir,N) # this is the 'r' in page 74 in that pdf I just mentioned
-    n1 = l.rig(norm(r.pos + out*step/2*unit(r.pos))) # this is the refractive index before the current position of the ray
-    n2 = l.rig(norm(r.pos - out*step/2*unit(r.pos))) # and this is the refractive index after. this is problematic...
-    n = n1/n2 # this is the ration between the two and the 'η' in page 74
-    c = 1. - n^2*(1. - a^2) # this is the 'c' in page 74
-    t = n*r.dir + (n*a - sqrt(c))*N # and finally the 't' in page 74
-    r.dir = unit(t) # I unitize the direction vector for the ray, updatiung the ray's direction
-    r.pos += step*r.dir # and step the ray forward along said direction, updatiung the ray's position
+# This is the main function that advances the ray along its path inside the lens. 
+# Everything happens here, and in fact too much does. It would be better if we'd brake it 
+# apart into logical segments. The algorithm is taken directly from page 74 in the 
+# S1-rt.pdf file I got from http://fileadmin.cs.lth.se/cs/Education/EDAN30/lectures/S1-rt.pdf 
+# in that website your graphics guy gave you 
+# (i.e. http://cs.lth.se/english/course/edan30-photorealistic-computer-graphics/assignments/). 
+# I'll refer to that page during the comments below. Notice that I didn't shifted 
+# the system to the lens center as I should. Since it's at 0,0 it doens't matter, 
+# but this should be included.
+
+function advance!(r::Ray,l::Lens) 
+    # here I find out if the ray is entering or exiting the lens (is it on it's way in or way out). 
+    # If its distance to the lens center is diminishing then the normal to the refractive 
+    # surface is going outwards. but if the ray is leaving the lens the normal to 
+    # the surface is pointing inwards.
+    costheta = dot(r.dir,r.pos)
+    
+    # is it going out? if so make out equal to +1, otherwise make it -1
+    out = -sign(costheta)
+    
+    # this is the normal to the refractive surface 
+    N = out*unit(r.pos)
+    
+    # this is the 'r' in page 74 in that pdf I just mentioned
+    a = dot(-r.dir,N)
+  
+    # save the old dir
+    olddir = r.dir
+    
+    # this is the refractive index before the current position of the ray
+    # n1 = l.rig(norm(r.pos + out*(step/2)*unit(r.pos)))
+    # why not just at pos?
+    n1 = l.rig(norm(r.pos))
+    # and this is the refractive index after. this is problematic...
+    # n2 = l.rig(norm(r.pos - out*(step/2)*unit(r.pos)))
+    # why not just at the new position, after the step?
+    n2 = l.rig(norm(r.pos + out*step*olddir))
+    
+    # this is the ratio between the two and the 'η' in page 74
+    n = n1/n2
+    
+    # this is the 'c' in page 74
+    c = 1. - n^2*(1. - a^2)
+    
+    # and finally the 't' in page 74
+    # added reflection as well... see page 54 (v is -r.dir)
+    t = c>0 ? n*r.dir + (n*a - sqrt(c))*N : 2* dot(N,-r.dir) *N + r.dir
+        
+    # I unitize the direction vector for the ray, updatiung the ray's direction
+    r.dir = unit(t)
+    
+    # and step the ray forward along said direction, updatiung the ray's position
+    r.pos += (step/2)*olddir + (step/2)*r.dir
 end
 
 #=OK, now comes the actual calculations=#
@@ -49,8 +95,13 @@ p1[1] = r.pos # populate with the start position
 l = Lens(Vector3([0.,0.,0.]),rad,rig) # initiate the lens, this is how we initiate an instance of a type, it's like a function!
 advance!(r,l) # advance once, just to penetrate the lens and be able to start that while loop below
 push!(p1,r.pos) # add said position to the position arrays
-while (norm(r.pos) < l.rad) & (length(p1) < 2e2) # loop until the distance of the ray form the lens center is larger or equal to rad OR until you looped more than 200 times (totally arbitrary)
-    advance!(r,l) # advance one step
+while (norm(r.pos) < l.rad) & (length(p1) < 4e2) # loop until the distance of the ray form the lens center is larger or equal to rad OR until you looped more than 200 times (totally arbitrary)
+#    try
+    	advance!(r,l) # advance one step
+#    catch
+#    	println("got some domain error... we have only this many points:",length(p1))
+#    	break
+#    end
     push!(p1,r.pos) # save the new position in the positions array
 end
 
