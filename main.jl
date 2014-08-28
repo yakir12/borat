@@ -7,8 +7,8 @@ type Ray # the ray type
 end
 
 type Lens # the lens type, we restrict ourselves to sphere shaped lenses
-    orig::Vector3 # the location of the sphere center
-    rad::Float64 # the radius of the sphere
+    org::Vector3 # the location of the sphere center
+    rad::Number # the radius of the sphere
     rig::Function # the Refractive Index Gradient (RIG) that describes the distribution of refractive indices inside the lens. We restrict ourdelves to spherically symmetrical distributions: so at a set distance form the lens center, the refractive index is equal in all directions (kind of like an onion?).
 end
 #=We should probably define a few more helpful types in the near future...=#
@@ -17,18 +17,51 @@ end
 const step = 1e-2 # the step size withwhich the ray advances every iterration
 const rad = 1. # the lens radius, this is only usfule cause there are a couple of calculations that depend on htis variable
 const n_periphery = 1.34 # the refractive index at the periphery of the lens, so at the very surface of the lens, when the distance from the lens center is equal to rad
-const n_center = 1.35 # the refractive index at the center of the lens, when the distance from the lens center is equal to zero
+const n_center = 1.55 # the refractive index at the center of the lens, when the distance from the lens center is equal to zero
+const L = 3.*rad # this is the distance between the center of the lens and the source light
+const nrays = 10 # the number of discrete rays I'll be tracing
+const c = Vector3([0.,0.,0.]) # this is the location of the center of the lens
 
 #=Now come the functions=#
-# this is the RIG function. Notice that its argument is of type Float64. 
-# It's just a parabola. Could be anything else really. 
-# It looks the way it does to make sure that it's a concave parabula with a n_center at r=0 
-# and n_periphery at r=rad. this can be optimized a bit by pre calculating parts of that equation
-rig(r::Float64) = (n_center-n_periphery)*(rad-r)*(rad+r)/rad^2+n_periphery
+#=this is the RIG function. Notice that its argument is now Number -- this is in the interest of generality... I set this RIG to be equal to the Luneburg lens, so that we can check the results real quick. see: http://en.wikipedia.org/wiki/Luneburg_lens=#
+rig(r::Number) = sqrt(2. - (r/rad)^2)
 
+#=this function initiates the array of Rays. It starts them off from directly above the lens at distance L. Thier directions are uniformly and randomly distributed across the lens.=#
+function initiate(l::Lens,L::Number,n::Int)
+    #=theta is the angle between the optical axis and the ray that touches the surface of the sphere=#
+    θ = asin(l.rad/L)
 
-function initiate(o::Array{Float64},d::Array{Float64}) # just a utility function to declare a ray. This is useful cause we can declare rays using a 3 element arrays (which isn't YET a Vector3D type), plus it takes care of the unitization of the direction vector
-    r = Ray(Vector3(o),unit(Vector3(d)))
+    #=epsilon is used only for the range in the rand function below, you'll see=#
+    ε = eps(typeof(θ))
+
+    #=z and h are randomly sampled from those ranges to generate the uniformaly spaced points on the sphere=#
+    z = rand(cos(θ):ε:1.,n)
+    h = rand(0.:ε:2π,n)
+
+    #=now come the x, y, and z that lie on the sphere's surface=#
+    x = sqrt(1. - z.^2).*cos(h)
+    y = sqrt(1. - z.^2).*sin(h)
+    z *= -1. # I flip the z so it'll point downwards
+
+    #=this is the starting position of all the rays -- point source=#
+    s = Vector3([0.,0.,L] .+ l.org)
+
+    #=an empty container for all the Rays=#
+    r = Array(Ray,n)
+    for i = 1:n
+
+        #=initiate the Ray with its initial position, s, and it's unitized direction that will end up on the sphere=#
+        r[i] = Ray(s,unit(Vector3([x[i],y[i],z[i]])))
+    end
+    return r
+end
+
+#=This function finds the intersection point of the light as it starts from its enitial point. It's a basic vector-sphere intersection thing. It works. Sorry I didn't comment it :P =#
+function hitlens!(r::Ray,l::Lens)
+    a = r.pos - l.org
+    b = dot(r.dir,a)^2 - norm(a)^2 + l.rad
+    c = -dot(r.dir,a) - sqrt(b)
+    r.pos += c*r.dir
 end
 
 # This is the main function that advances the ray along its path inside the lens. 
@@ -42,7 +75,7 @@ end
 # but this should be included.
 
 function advance!(r::Ray,l::Lens) 
-    # here I find out if the ray is entering or exiting the lens (is it on it's way in or way out). 
+    # here I find out if the ray is on it's way in or way out. 
     # If its distance to the lens center is diminishing then the normal to the refractive 
     # surface is going outwards. but if the ray is leaving the lens the normal to 
     # the surface is pointing inwards.
@@ -87,39 +120,52 @@ function advance!(r::Ray,l::Lens)
 end
 
 #=OK, now comes the actual calculations=#
-x = y = .9*rad/sqrt(2) # I define the x and y for the location of the ray, arbitrary choosing them to be equal to each other (in the near future we'll define a start point for the light to shoot at the lens, and find where in the lens surface the light intersect with the lens)
-z = sqrt(rad^2-x^2-y^2) # z is calculated so that the ray will be on the lens surface
-r = initiate([x,y,z],[0.,0.,-1.]) # start a ray at x,y,z and give it a downward direction
-p1 = Array(Vector3,1) # an array of positions. Defined as an array who's elements are Vector3
-p1[1] = r.pos # populate with the start position
-l = Lens(Vector3([0.,0.,0.]),rad,rig) # initiate the lens, this is how we initiate an instance of a type, it's like a function!
-advance!(r,l) # advance once, just to penetrate the lens and be able to start that while loop below
-push!(p1,r.pos) # add said position to the position arrays
-while (norm(r.pos) < l.rad) & (length(p1) < 4e2) # loop until the distance of the ray form the lens center is larger or equal to rad OR until you looped more than 200 times (totally arbitrary)
-#    try
-    	advance!(r,l) # advance one step
-#    catch
-#    	println("got some domain error... we have only this many points:",length(p1))
-#    	break
-#    end
-    push!(p1,r.pos) # save the new position in the positions array
+l = Lens(c,rad,rig) # initiate the lens, this is how we initiate an instance of a type, it's like a function!
+r0 = initiate(l,L,nrays) # initiate all the rays
+
+p = {Array(Vector3,1) for i in 1:nrays} # a cell array of arrays of positions. Defined as an array who's elements are Vector3
+
+#=Now we itirate through all the rays, tracing them=#
+for i = 1:nrays
+    
+    #=I first copy the i^th ray's initial position to r, for conviniance=#
+    r = deepcopy(r0[i])
+    p[i][1] = r.pos # populate with the start position
+
+    #=find the intersection point and update r's position=#
+    hitlens!(r,l)
+    push!(p[i],r.pos) # add said position to the position arrays
+    advance!(r,l) # advance once, just to penetrate the lens and be able to start that while loop below
+    push!(p[i],r.pos) # add said position to the position arrays
+    while (norm(r.pos) < l.rad) & (length(p[i]) < 4e3) # loop until the distance of the ray form the lens center is larger or equal to rad OR until you looped more than 200 times (totally arbitrary)
+    #    try
+            advance!(r,l) # advance one step
+    #    catch
+    #    	println("got some domain error... we have only this many points:",length(p))
+    #    	break
+    #    end
+        push!(p[i],r.pos) # save the new position in the positions array
+    end
 end
 
-#=next we extract all the x,y,z values from the locations, maybe there's a more Julainian way to do this.=#
-xyz = cat(2,p1...) # here I use the ... operator to extract all the vectors from the locations and concatinate them along the second dimension
-x = vec(xyz[1,:]) # I convert each to a vector (in Julia, a vector is a stricktly one dimentional vector, which is different than a matirx with dimensions [1,2] or [2,1])
-y = vec(xyz[2,:])
-z = vec(xyz[3,:])
-plot3D(x,y,z,color="red") # plot the ray trajectory in red
+#=plot all the ray's trajectories=#
+for i = 1:nrays
+      xyz = cat(2,p[i]...) # here I use the ... operator to extract all the vectors from the locations and concatinate them along the second dimension
+    x = vec(xyz[1,:]) # I convert each to a vector (in Julia, a vector is a stricktly one dimentional vector, which is different than a matirx with dimensions [1,2] or [2,1])
+    y = vec(xyz[2,:])
+    z = vec(xyz[3,:])
 
-#=now comes the shitty sphere plot. surely there is a better way?=#
+    plot3D(x,y,z,color="red") # plot the ray trajectory in red
+end
+
+#=now comes the shitty sphere plot. I think I improved it a bit :)=# 
 n = 100 # number of points to plot
 u = linspace(0., π, n) # the two angles that define the location of the points on the sphere
 v = linspace(0., 2π, n)' # notice that I transpose this one with '
 u .+= 0*v # the transposition is "carried" and expanded through the .+ operator to make u a n by n matrix
 v .+= 0*u # same here
-x = l.orig.e1 + l.rad*cos(u).*sin(v) # then standard vector math
-y = l.orig.e2 + l.rad*sin(u).*sin(v)
-z = l.orig.e3 + l.rad*cos(v)
-plot_surface(x, y, z, color="blue",alpha=.5,linewidth=0) # and finally ploting the sphere with some transparency so that we'll be able to see the ray
+x = l.org.e1 + l.rad*cos(u).*sin(v) # then standard vector math
+y = l.org.e2 + l.rad*sin(u).*sin(v)
+z = l.org.e3 + l.rad*cos(v)
+plot_surface(x, y, z, color="blue",alpha=.5,linewidth=0,rstride=4,cstride=4) # and finally ploting the sphere with some transparency so that we'll be able to see the ray
 
