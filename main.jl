@@ -17,7 +17,7 @@ end
 const step = 1e-2 # the step size withwhich the ray advances every iterration
 const rad = 1. # the lens radius, this is only usfule cause there are a couple of calculations that depend on htis variable
 const n_periphery = 1.34 # the refractive index at the periphery of the lens, so at the very surface of the lens, when the distance from the lens center is equal to rad
-const n_center = 1.55 # the refractive index at the center of the lens, when the distance from the lens center is equal to zero
+const n_center = 1.45 # the refractive index at the center of the lens, when the distance from the lens center is equal to zero
 const L = 3.*rad # this is the distance between the center of the lens and the source light
 const nrays = 10 # the number of discrete rays I'll be tracing
 const c = Vector3([0.,0.,0.]) # this is the location of the center of the lens
@@ -88,7 +88,7 @@ function advance!(r::Ray,l::Lens)
     N = out*unit(r.pos)
     
     # this is the 'r' in page 74 in that pdf I just mentioned
-    a = dot(-r.dir,N)
+    a = -dot(r.dir,N)
   
     # save the old dir
     olddir = r.dir
@@ -100,7 +100,7 @@ function advance!(r::Ray,l::Lens)
     # and this is the refractive index after. this is problematic...
     # n2 = l.rig(norm(r.pos - out*(step/2)*unit(r.pos)))
     # why not just at the new position, after the step?
-    n2 = l.rig(norm(r.pos + out*step*olddir))
+    n2 = l.rig(norm(r.pos + step*olddir))
     
     # this is the ratio between the two and the 'η' in page 74
     n = n1/n2
@@ -116,7 +116,8 @@ function advance!(r::Ray,l::Lens)
     r.dir = unit(t)
     
     # and step the ray forward along said direction, updatiung the ray's position
-    r.pos += (step/2)*olddir + (step/2)*r.dir
+    # r.pos += (step/2)*olddir + (step/2)*r.dir
+    r.pos += step*olddir
 end
 
 #=OK, now comes the actual calculations=#
