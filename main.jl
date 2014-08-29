@@ -34,7 +34,7 @@ Retina(o,r) = Retina(Sphere(Vector3(o),r))
 const step = 1e-4 # the step size with which the ray advances every iteration
 const lens_r = 1. # the lens radius, this is only useful cause there are a couple of calculations that depend on this variable
 const L = 1e3*lens_r # this is the distance between the center of the lens and the source light
-const nrays = 100 # the number of discrete rays I'll be tracing
+const nrays = 1000 # the number of discrete rays I'll be tracing
 const c = Vector3([0.,0.,0.]) # this is the location of the center of the lens
 const n_medium = 1. # this is the refractive index of the medium surrounding the lens
 const retina_r = 1.2*lens_r # this is the retina's radius, good practice to make it a function of the lens radius 
@@ -162,11 +162,16 @@ for i = 1:nrays
     refract!(r,unit(r.pos - l.s.org),n_medium/l.rig(l.s.rad)) # refract at the surface of the lens due to the medium's refractive index (that might be different from that of the lens' periphery)
     advance!(r,l) # advance once, just to penetrate the lens and be able to start that while loop below
     push!(p[i],r.pos) # add said position to the position arrays
-    while (norm(r.pos - l.s.org) < l.s.rad) & (length(p[i]) < 1e5) # loop until the distance of the ray from the lens center is larger or equal to lens_r OR until you looped more than # times (totally arbitrary, and useful only in cases where the rays are trapped in the lens)
+    while length(p[i]) < 1e5 # until you looped more than # times (totally arbitrary, and useful only in cases where the rays are trapped in the lens)
         advance!(r,l) # advance one step
         push!(p[i],r.pos) # save the new position in the positions array
+        if norm(r.pos + step*r.dir-l.s.org) > l.s.rad # is the ray GOING TO exit the lens in the next iteration? If so, intersect it with the lens (which is therefore closer)
+            intersect!(r,l.s) # find intersection point with the lens, update Ray r
+            push!(p[i],r.pos) # add said position to the position arrays
+            break # and break the loop
+        end
     end
-    refract!(r,-unit(r.pos - l.s.org),l.rig(l.s.rad)/n_medium) # again, refract when exiting the lens and entering the surrounding medium
+    refract!(r,-unit(r.pos - l.s.org),l.rig(l.s.rad)/n_medium) # refract when exiting the lens and entering the surrounding medium
     intersect!(r,retina.s) # find intersection point with the retina, update Ray r
     push!(p[i],r.pos) # add said position to the position arrays
 end
@@ -212,10 +217,9 @@ z = retina.s.org.e1 - retina.s.rad*z .+ 0.*h # I flip the z so it'll point downw
 
 plot_surface(x, y, z, color="green",alpha=.25,linewidth=0,rstride=4,cstride=4) # and finally plotting the sphere with some transparency so that we'll be able to see the ray
 
-#=Thought I'd assess the accuracy of the focal point. The points in p one before last are all at the lens surface, and because the rig is a Luneburg lens, then they should all be at the same spot in space. Feel free to improve on the following:=#
+#=Thought I'd assess the accuracy of the focal point. The points in p one before last are all at the lens surface, and because the rig is a Luneburg lens, then they should all be lens radius below the lens origin. Feel free to improve on the following:=#
 map(x -> [x[end-1]],p)
 a = [[x[end-1]] for x in p]
 a = cat(2,a...)
-σ1 = sum(std(a,2))
-μ = mean(a,2)
-σ2 = sum((a .- repmat(μ,1,nrays)).^2)
+goal = [l.s.org] .- [0.,0.,l.s.rad] # this is where they should all be at
+σ = sum((a .- repmat(goal,1,nrays)).^2)
