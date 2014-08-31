@@ -33,8 +33,8 @@ Retina(o,r) = Retina(Sphere(Vector3(o),r))
 #=Now come the constants, there is no real reason to define the following variables as constants, other than that it makes sense that these don't change in value throughout the program. =#
 const step = 1e-4 # the step size with which the ray advances every iteration
 const lens_r = 1. # the lens radius, this is only useful cause there are a couple of calculations that depend on this variable
-const L = 1e3*lens_r # this is the distance between the center of the lens and the source light
-const nrays = 1000 # the number of discrete rays I'll be tracing
+const L = Inf#1e3*lens_r # this is the distance between the center of the lens and the source light
+const nrays = 100 # the number of discrete rays I'll be tracing
 const c = Vector3([0.,0.,0.]) # this is the location of the center of the lens
 const n_medium = 1. # this is the refractive index of the medium surrounding the lens
 const retina_r = 1.2*lens_r # this is the retina's radius, good practice to make it a function of the lens radius 
@@ -45,32 +45,46 @@ rig(r::Number) = sqrt(2. - (r/lens_r)^2)
 
 #=this function initiates the array of Rays. It starts them off from directly above the lens at distance L. Their directions are uniformly and randomly distributed across the lens.=#
 function initiate(l::Lens,L::Number,n::Int)
-    #=theta is the angle between the optical axis and the ray that touches the surface of the sphere=#
-    θ = asin(l.s.rad/L)
+    if isinf(L) # if the light source is infinitely far away
+        #=just ditribute the rays uniformly on the disk that the sphere makes=#
+        sqrtr = sqrt(rand(n)) 
+        θ = rand(n)*2π
+        x = l.s.org[1] + sqrtr .* cos(θ)
+        y = l.s.org[2] + sqrtr .* sin(θ)
+        #=an empty container for all the Rays=#
+        r = Array(Ray,n)
+        for i = 1:n
+            #=initiate the Ray with those starting points at distance 2*rad (could be any distance larger than rad really, and point them directly down at the lens=#
+            r[i] = Ray(Vector3([x[i],y[i],l.s.org[3] + 2l.s.rad]),Vector3([0.,0.,-1.]))
+        end
+    else
+        #=theta is the angle between the optical axis and the ray that touches the surface of the sphere=#
+        θ = asin(l.s.rad/L)
 
-    #=epsilon is used only for the range in the rand function below, you'll see=#
-    ε = eps(typeof(θ))
+        #=epsilon is used only for the range in the rand function below, you'll see=#
+        ε = eps(typeof(θ))
 
-    #=z and h are randomly sampled from those ranges to generate the uniformly spaced points on the sphere=#
-    z = rand(cos(θ):ε:1.,n)
-    h = rand(0.:ε:2π,n)
+        #=z and h are randomly sampled from those ranges to generate the uniformly spaced points on the sphere=#
+        z = rand(cos(θ):ε:1.,n)
+        h = rand(0.:ε:2π,n)
 
-    #=z = linspace(cos(θ),1.,n)=#
-    #=h = linspace(0.,2π,n)=#
+        #=z = linspace(cos(θ),1.,n)=#
+        #=h = linspace(0.,2π,n)=#
 
-    #=now come the x, y, and z that lie on the sphere's surface=#
-    x = sqrt(1. - z.^2).*cos(h)
-    y = sqrt(1. - z.^2).*sin(h)
-    z *= -1. # I flip the z so it'll point downwards
+        #=now come the x, y, and z that lie on the sphere's surface=#
+        x = sqrt(1. - z.^2).*cos(h)
+        y = sqrt(1. - z.^2).*sin(h)
+        z *= -1. # I flip the z so it'll point downwards
 
-    #=this is the starting position of all the rays -- point source=#
-    s = Vector3([0.,0.,L] .+ l.s.org)
+        #=this is the starting position of all the rays -- point source=#
+        s = Vector3([0.,0.,L] .+ l.s.org)
 
-    #=an empty container for all the Rays=#
-    r = Array(Ray,n)
-    for i = 1:n
-        #=initiate the Ray with its initial position, s, and it's unitized direction that will end up on the sphere=#
-        r[i] = Ray(s,unit(Vector3([x[i],y[i],z[i]])))
+        #=an empty container for all the Rays=#
+        r = Array(Ray,n)
+        for i = 1:n
+            #=initiate the Ray with its initial position, s, and it's unitized direction that will end up on the sphere=#
+            r[i] = Ray(s,unit(Vector3([x[i],y[i],z[i]])))
+        end
     end
     return r
 end
@@ -222,4 +236,4 @@ map(x -> [x[end-1]],p)
 a = [[x[end-1]] for x in p]
 a = cat(2,a...)
 goal = [l.s.org] .- [0.,0.,l.s.rad] # this is where they should all be at
-σ = sum((a .- repmat(goal,1,nrays)).^2)
+σ = sum((a .- repmat(goal,1,nrays)).^2)/nrays
