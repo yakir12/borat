@@ -13,7 +13,7 @@ end
 
 type Sphere # this is going to be used by both the lens and the retina, since they are both sphere shaped
     org::Vector3
-    rad::Number
+    rad::Real
     #=Easy to avoid, but why not?=#
     Sphere(org,rad) = rad < 0. ? error("negative sphere radius") : new(org,rad)
 end
@@ -40,11 +40,11 @@ const n_medium = 1. # this is the refractive index of the medium surrounding the
 const retina_r = 1.2*lens_r # this is the retina's radius, good practice to make it a function of the lens radius 
 
 #=Now come the functions=#
-#=this is the RIG function. Notice that its argument is now Number -- this is in the interest of generality... I set this RIG to be equal to the Luneburg lens, so that we can check the results real quick. see: http://en.wikipedia.org/wiki/Luneburg_lens=#
-rig(r::Number) = sqrt(2. - (r/lens_r)^2)
+#=this is the RIG function. Notice that its argument is now Real -- this is in the interest of generality... I set this RIG to be equal to the Luneburg lens, so that we can check the results real quick. see: http://en.wikipedia.org/wiki/Luneburg_lens=#
+rig(r::Real) = sqrt(2. - (r/lens_r)^2)
 
 #=this function initiates the array of Rays. It starts them off from directly above the lens at distance L. Their directions are uniformly and randomly distributed across the lens.=#
-function initiate(l::Lens,L::Number,n::Int)
+function initiate(l::Lens,L::Real,n::Int)
     if isinf(L) # if the light source is infinitely far away
         #=just ditribute the rays uniformly on the disk that the sphere makes=#
         sqrtr = sqrt(rand(n)) 
@@ -105,7 +105,7 @@ function intersect!(r::Ray,s::Sphere)
 end
 
 #=I found it useful to separate that advance function. The main reason is that refraction occurs at the surface between the medium and the lens, not only in the lens. So this function can be used in both scenarios. r is the ray, N is the normal to the refractive surface, and n is the ratio between the refractive index before the surface and the refractive index after the surface. =#
-function refract!(r::Ray,N::Vector3,n::Number)
+function refract!(r::Ray,N::Vector3,n::Real)
     # this is the 'r' in page 74 in that pdf I just mentioned
     a = -dot(r.dir,N)
     
