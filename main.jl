@@ -54,9 +54,6 @@ function plotOneRay(oneray::Array{Vector3{Float64},1})
     plot3D(x,y,z,color="red") # plot the ray trajectory in red
 end
 
-tic()
-
-
 # define the function for tracing one ray
 @everywhere function traceOneRay(l::Lens,L::Real) #:Array{Vector3, 1}
     # initiate this ray
@@ -128,8 +125,14 @@ rayindices = [i::Int for i in 1:nrays]
 	traceOneRay(l,L)
 end
 
+# start timer
+tic()
+
 # run ray tracing in parallel
 pm = pmap(tOR, rayindices)
+
+# print time from tic
+toc()
 
 # do the plot, pmap?
 map(plotOneRay,pm)
@@ -141,9 +144,6 @@ for i = 1:nrays
 	plotOneRay(ar)
 end
 =#
-
-# print time from tic
-toc()
 
 # now comes the shitty sphere plot. I think I improved it a bit :)=# 
 n = 100 # number of points to plot
