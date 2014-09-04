@@ -1,15 +1,15 @@
 using PyPlot, Shapes, RayTrace
 
-const maxiter = int(1e5)
 const ε = 1e-4 # the ε size with which the ray bend every iteration
 const lens_r = 1. # the lens radius, this is only useful cause there are a couple of calculations that depend on this variable
-const c = [0.,0.,0.] # this is the location of the center of the lens
+const maxiter = int(2π*lens_r/ε)
+const c = [100.,-20.,330.] # this is the location of the center of the lens
 const retina_r = 1.2*lens_r # this is the retina's radius, good practice to make it a function of the lens radius 
-const L = Inf#1e3*lens_r # this is the distance between the center of the lens and the source light
+const L = Inf # this is the distance between the center of the lens and the source light
 const nrays = 100 # the number of discrete rays I'll be tracing
 const n_medium = 1. # this is the refractive index of the medium surrounding the lens
 const lens_r2 = lens_r*lens_r
-const goal = [0.,0.,-lens_r]
+const goal = c .- [0.,0.,lens_r]
 ri(r::Float64) = sqrt(2. - r*r/lens_r2) # this is the RIG function. Notice that its argument is now Real -- this is in the interest of generality... I set this RIG to be equal to the Luneburg lens, so that we can check the results real quick. see: http://en.wikipedia.org/wiki/Luneburg_lens
 
 #=OK, now comes the actual calculations=#
@@ -21,11 +21,11 @@ nsteps = 0
 #=Now we iterate through all the rays, tracing them=#
 for i = 1:nrays
     p = zeros(3,maxiter)
-    Δ = [0.]
-    iter = [0]
-    trace!(p,lens,retina,L,n_medium,maxiter,goal,Δ,iter)
-    P[i] = Δ[1]
-    plot3D(vec(p[1,1:iter[1]]),vec(p[2,1:iter[1]]),vec(p[3,1:iter[1]]),color="red")
+    diagnose = [:Δ => 0., :len => 0, :goal => goal]
+    trace!(p,lens,retina,L,n_medium,maxiter,diagnose)
+    P[i] = diagnose[:Δ]
+    ind = round(linspace(2,diagnose[:len],10))
+    plot3D(vec(p[1,ind]),vec(p[2,ind]),vec(p[3,ind]),color="red")
 end
 
 #>now comes the shitty sphere plot. I think I improved it a bit :)<] =#
