@@ -1,5 +1,6 @@
-using PyPlot, Shapes, RayTrace # PyPlot is slow and in the ultimate version will be removed
-
+@everywhere using Shapes, RayTrace # PyPlot is slow and in the ultimate version will be removed
+using PyPlot
+@everywhere begin
 # constants:
 const ε = 1e-4 # the ε size with which the ray advances every iteration
 const lens_r = 1. # the lens radius
@@ -14,19 +15,45 @@ const goal = c .- [0.,0.,lens_r] # this is where all rays that start at L=Inf sh
 ri(r::Float64) = sqrt(2. - r*r/lens_r2) # this is the refractive index gradient function. I set this RIG to be equal to the Luneburg lens, so that we can check the results real quick.
 const lens = Lens(c,lens_r,ri,ε) # initiate the lens
 const retina = Retina(c,retina_r) # initiate the retina
+#const procsToUse = 2
 
 # actual calculations
-Δ = zeros(nrays) # the matrix of euclidean distance between where the ray exsits the lens and the goal
+
+end
+
+@everywhere function oneIter(i)
 # iterate through all the rays, ploting them
-for i = 1:nrays
     p = zeros(3,maxiter) # ray locations
     diagnose = [:Δ => 0., :len => 0, :goal => goal] # diagnosys, including the distance to the goal, the number of refraction points, the goal
     trace!(p,lens,retina,L,n_medium,maxiter,diagnose) # main function that ray-traces the system
-    Δ[i] = diagnose[:Δ] # put that distance in the matrix
+    return (p,diagnose)
     # plotting:
+    #ind = round(linspace(2,diagnose[:len],10)) # let's plot just 10 points inside the lens, no need to go crazy
+    #plot3D(vec(p[1,ind]),vec(p[2,ind]),vec(p[3,ind]),color="red") # plotting it in red...
+end
+
+x = pmap(oneIter,1:nrays)
+
+
+Δ = zeros(nrays) # the matrix of euclidean distance between where the ray exsits the lens and the goal
+for i = 1:nrays
+    p = x[i][1]
+    diagnose = x[i][2]
+    Δ[i] = diagnose[:Δ] # put that distance in the matrix
     ind = round(linspace(2,diagnose[:len],10)) # let's plot just 10 points inside the lens, no need to go crazy
     plot3D(vec(p[1,ind]),vec(p[2,ind]),vec(p[3,ind]),color="red") # plotting it in red...
 end
+
+# set this up ONCE for a parallel environment
+#=np = nprocs()
+if np >= procsToUse
+	println("Already running on ",np," processors.")
+else
+	deltaproc = procsToUse-np
+	println("Starting ",deltaproc," more processors.")
+	addprocs(deltaproc)
+	println("Now running on ",nprocs()," processors.")
+end=#
 
 # sphere plot
 n = 100 # number of points to plot=#
