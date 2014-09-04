@@ -1,11 +1,11 @@
 #=module Borat=#
 
-#=export Vec, +, -, *, /, dot, norm, unitize, Ray, Sphere, Lens, Retina, initiate, intersect!, refract!,advance!, poke=#
+#=export Vec, +, -, *, /, dot, norm, unitize, Ray, Sphere, Lens, Retina, initiate, intersect!, refract!,bend!, step=#
 #=first we define a few useful types. Since Julia is a highly (but not strictly) typed language, this is an awesome feature that speeds up the code and makes it clean and easy to follow=#
 
 using PyPlot
 
-immutable Vec{Float64}
+immutable Vec
     x::Float64
     y::Float64
     z::Float64
@@ -21,20 +21,16 @@ dot(a::Vec, b::Vec) = (a.x*b.x + a.y*b.y + a.z*b.z)
 norm(a::Vec) = sqrt(dot(a, a))
 unitize(a::Vec) = (a/norm(a))
 
-
 type Ray # the ray type
     pos::Vec # has a position, a location
     dir::Vec # and a direction, which has to be unitized, norm(dir) = 1
 end
-#=Ray(p::Vector{Float64},d::Vector{Float64}) = Ray(Vec(p),Vec(d))=#
-#=Ray(p::Vec,d::Vector{Float64}) = Ray(p,Vec(d))=#
-#=Ray(p::Vector{Float64},d::Vec) = Ray(Vec(p),d)=#
 
-type Bull
-    ray::Ray
-    N::Vec
-    dis::Float64
-    n1::Float64
+type Bull # helper type for rays that are in a GRIN lens
+    ray::Ray # the ray, note its origin is now the center ot the lens
+    N::Vec # the normal to the refractive surface
+    dis::Float64 # the distance to the lens center
+    n1::Float64 # the refractive index at the previous position
 end
 
 abstract Sphere
@@ -52,24 +48,17 @@ type Retina <: Sphere# the retina type, simple for now
     r::Float64
 end
 Retina(a::Vector{Float64},b::Float64) = Retina(Vec(a),b)
-#=We should probably define a few more helpful types in the near future...=#
 
 #=Now come the functions=#
 
-#=this function initiates the array of Rays. It starts them off from directly above the lens at distance L. Their directions are uniformly and randomly distributed across the lens.=#
-
+# initiates the Bull type.
 function Bull(ray::Ray,lens::Lens)
-
-    ray.pos -= lens.c
+    ray.pos -= lens.c # set ray's origin on the lens' center
     return Bull(ray,Vec(0.,0.,0.),0.,0.)
-#=    n1 = lens.ri(norm(ray.pos))
-    ray.pos += lens.ε*ray.dir
-    N = unitize(ray.pos)
-    dis = norm(ray.pos)
-    return Bull(ray,N,dis,n1)=#
 end
 
 
+#=this function initiates the array of Rays. It starts them off from directly above the lens at distance L. Their directions are uniformly and randomly distributed across the lens.=#
 function letBlight(lens::Lens,L::Float64)
     if isinf(L) # if the light source is infinitely far away
         #=just ditribute the rays uniformly on the disk that the sphere makes=#
@@ -115,7 +104,7 @@ function intersect!(ray::Ray,s::Sphere)
     end
 end
 
-#=I found it useful to separate that advance function. The main reason is that refraction occurs at the surface between the medium and the lens, not only in the lens. So this function can be used in both scenarios. ray is the ray, N is the normal to the refractive surface, and n is the ratio between the refractive index before the surface and the refractive index after the surface. =#
+#=I found it useful to separate that bend function. The main reason is that refraction occurs at the surface between the medium and the lens, not only in the lens. So this function can be used in both scenarios. ray is the ray, N is the normal to the refractive surface, and n is the ratio between the refractive index before the surface and the refractive index after the surface. =#
 function refract!(ray::Ray,N::Vec,n::Float64)
     # this is the 'r' in page 74 in that pdf I just mentioned
     a = -dot(ray.dir,N)
@@ -131,11 +120,11 @@ function refract!(ray::Ray,N::Vec,n::Float64)
     ray.dir = unitize(t)
 end
 
-function poke!(bull::Bull,lens::Lens)
+function step!(bull::Bull,lens::Lens)
  # first I find the refractive index at the current position
     bull.n1 = lens.ri(norm(bull.ray.pos))
 
-    # then I advance the ray one ε forward with its original direction
+    # then I bend the ray one ε forward with its original direction
     bull.ray.pos += lens.ε*bull.ray.dir
 
     # useful
@@ -143,13 +132,13 @@ function poke!(bull::Bull,lens::Lens)
     bull.N = bull.ray.pos/bull.dis
 end
 
-# This is the main function that advances the ray along its path inside the lens. 
+# This is the main function that bend the ray along its path inside the lens. 
 # Everything happens here, and in fact too much does. It would be better if we'd brake it 
 # apart into logical segments. The algorithm is taken directly from page 74 in the 
 # S1-rt.pdf file I got from http://fileadmin.cs.lth.se/cs/Education/EDAN30/lectures/S1-rt.pdf 
 # in that website your graphics guy gave you 
 # (i.e. http://cs.lth.se/english/course/edan30-photorealistic-computer-graphics/assignments/). 
-function advance!(bull::Bull,lens::Lens) 
+function bend!(bull::Bull,lens::Lens) 
     # now I'm in the new position where the ray will refract. So there's a new refractive index here:
     n2 = lens.ri(bull.dis)
 
@@ -170,56 +159,65 @@ function advance!(bull::Bull,lens::Lens)
 
 end
 
+#=this is the RIG function. Notice that its argument is now Real -- this is in the interest of generality... I set this RIG to be equal to the Luneburg lens, so that we can check the results real quick. see: http://en.wikipedia.org/wiki/Luneburg_lens=#
+ri(r::Float64) = sqrt(2. - r*r/lens_r2)
 
-const ε = 1e-4 # the ε size with which the ray advances every iteration
+const ε = 1e-4 # the ε size with which the ray bend every iteration
 const lens_r = 1. # the lens radius, this is only useful cause there are a couple of calculations that depend on this variable
 const c = [0.,0.,0.] # this is the location of the center of the lens
 const retina_r = 1.2*lens_r # this is the retina's radius, good practice to make it a function of the lens radius 
 const L = Inf#1e3*lens_r # this is the distance between the center of the lens and the source light
 const nrays = 100 # the number of discrete rays I'll be tracing
 const n_medium = 1. # this is the refractive index of the medium surrounding the lens
-#=this is the RIG function. Notice that its argument is now Real -- this is in the interest of generality... I set this RIG to be equal to the Luneburg lens, so that we can check the results real quick. see: http://en.wikipedia.org/wiki/Luneburg_lens=#
-lens_r2 = lens_r*lens_r
-ri(r::Float64) = sqrt(2. - r*r/lens_r2)
+const lens_r2 = lens_r*lens_r
 
 #=OK, now comes the actual calculations=#
-lens = Lens(c,lens_r,ri,ε) # initiate the lens, this is how we initiate an instance of a type, it's like a function!
-retina = Retina(c,retina_r) # initiate the retina
+const lens = Lens(c,lens_r,ri,ε) # initiate the lens, this is how we initiate an instance of a type, it's like a function!
+const retina = Retina(c,retina_r) # initiate the retina
 
 p = [Array(Vec,1)::Array{Vec,1} for i in 1:nrays] # a cell array of arrays of positions. Defined as an array who's elements are Vec
-ray = Ray(Vec(zeros(3)),Vec(zeros(3)))
 nsteps = 0
 #=Now we iterate through all the rays, tracing them=#
 for i = 1:nrays
     
     ray = letBlight(lens,L) # initiate all the rays
+
     p[i][1] = ray.pos # populate with the start position
 
     #=find the intersection point of the ray with the lens and update ray's position=#
     intersect!(ray,lens)
+
     push!(p[i],ray.pos) # add said position to the position arrays
+
     refract!(ray,unitize(ray.pos - lens.c),n_medium/lens.ri(lens.r)) # refract at the surface of the lens due to the medium's refractive index (that might be different from that of the lens' periphery)
     bull = Bull(ray,lens)
     nsteps = 0
-    #=advance!(ray,lens) # advance once, just to penetrate the lens and be able to start that while loop below=#
+    #pp = Array(Vec,1)
+    #=bend!(ray,lens) # bend once, just to penetrate the lens and be able to start that while loop below=#
     #=push!(p[i],ray.pos) # add said position to the position arrays=#
     while nsteps < 1e6 #length(p[i]) < 1e5 # until you looped more than # times (totally arbitrary, and useful only in cases where the rays are trapped in the lens)
 
 
-        poke!(bull,lens) # advance one ε
+        step!(bull,lens) # bend one ε
         if bull.dis > lens.r # is the ray GOING TO exit the lens in the next iteration? If so, intersect it with the lens (which is therefore closer)
             ray = bull.ray
             ray.pos -= lens.ε*ray.dir-lens.c
             intersect!(ray,lens) # find intersection point with the lens, update Ray ray
+
+            #shift!(pp)
+            #p[i] = cat(1,p[i],map(x -> x + lens.c,pp))
             push!(p[i],ray.pos) # add said position to the position arrays
+
             break # and break the loop
         end
-        advance!(bull,lens)
         push!(p[i],bull.ray.pos + lens.c) # save the new position in the positions array
+
+        bend!(bull,lens)
         nsteps += 1
     end
     refract!(ray,-unitize(ray.pos - lens.c),lens.ri(lens.r)/n_medium) # refract when exiting the lens and entering the surrounding medium
     intersect!(ray,retina) # find intersection point with the retina, update Ray ray
+
     push!(p[i],ray.pos) # add said position to the position arrays
 end
 
