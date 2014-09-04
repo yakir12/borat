@@ -1,5 +1,5 @@
-@everywhere using Shapes, RayTrace # PyPlot is slow and in the ultimate version will be removed
 using PyPlot
+@everywhere using Shapes, RayTrace # PyPlot is slow and in the ultimate version will be removed
 @everywhere begin
 # constants:
 const ε = 1e-4 # the ε size with which the ray advances every iteration
@@ -8,7 +8,7 @@ const maxiter = int(2π*lens_r/ε) # maximum iteration allowed. This value is ba
 const c = [100.,-20.,330.] # location of the center of the lens. It has no real use here, but good to have it.
 const retina_r = 1.2*lens_r # the retina's radius, good practice to make it a function of the lens radius 
 const L = Inf # the distance between the center of the lens and the source light
-const nrays = 100 # the number of discrete rays
+const nrays = 1000 # the number of discrete rays
 const n_medium = 1. # the refractive index of the medium surrounding the lens
 const lens_r2 = lens_r*lens_r # just to make the refractive index gradient function faster
 const goal = c .- [0.,0.,lens_r] # this is where all rays that start at L=Inf should end up at.
