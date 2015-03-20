@@ -1,6 +1,6 @@
 module RayTrace # main model that calls on all the other modules
 
-using Shapes, Vector3D, RefractiveIndexGradients
+using Shapes, Vector3D
 
 export trace! # nice, just one funnction to export
 
@@ -84,7 +84,7 @@ end
 
 # a step function. moves the ray forward one ε. Notice that the ray is now packed inside Bull, and is normalized to the lens center
 function step!(bull::Bull,lens::Lens)
-    bull.n1 = getRefractiveIndex(lens.rig, bull.ray.pos) # first I find the refractive index at the current position
+    bull.n1 = lens.ri(norm(bull.ray.pos)) # first I find the refractive index at the current position
 
     bull.ray.pos += lens.ε*bull.ray.dir # then I move the ray one ε forward with its original direction
 
@@ -94,7 +94,7 @@ end
 
 # bend the ray accordingly to the refraction/reflection. 
 function bend!(bull::Bull,lens::Lens) 
-    n2 = getRefractiveIndex(lens.rig, bull.ray.pos) # new refractive index here
+    n2 = lens.ri(bull.dis) # new refractive index here
 
     # here I find out if the ray is on it's way in or way out. If its distance to the lens center is diminishing then the normal to the refractive surface is going outwards. But if the ray is leaving the lens the normal to the surface is pointing inwards.
     costheta = dot(bull.ray.dir,bull.ray.pos)
@@ -117,10 +117,7 @@ function trace!(p::Array{Float64,2},lens::Lens,retina::Retina,L::Float64,n_mediu
 
     p[:,2] = myconvert(ray.pos) # add said intersection to the position matrix
 
-	# made this clearer...
-	lensRI = getRefractiveIndex(lens.rig, ray.pos)
-
-    refract!(ray,unitize(ray.pos - lens.c),n_medium/lensRI) # refract at the surface of the lens due to the medium's refractive index (that might be different from that of the lens' periphery)
+    refract!(ray,unitize(ray.pos - lens.c),n_medium/lens.ri(lens.r)) # refract at the surface of the lens due to the medium's refractive index (that might be different from that of the lens' periphery)
     bull = Bull(ray,lens) # make a bull instance
     for i = 3:maxiter-1 # go for maximum maxiterATIONS
         step!(bull,lens) # advance one ε
@@ -136,11 +133,7 @@ function trace!(p::Array{Float64,2},lens::Lens,retina::Retina,L::Float64,n_mediu
         p[:,i] = myconvert(bull.ray.pos + lens.c) # save the new position in the positions matrix
         bend!(bull,lens) # and refract 
     end
-    
-    # again refractive index computation
-    lensRI = getRefractiveIndex(lens.rig, ray.pos)
-    
-    refract!(ray,-unitize(ray.pos - lens.c),lensRI/n_medium) # refract when exiting the lens and entering the surrounding medium
+    refract!(ray,-unitize(ray.pos - lens.c),lens.ri(lens.r)/n_medium) # refract when exiting the lens and entering the surrounding medium
     intersect!(ray,retina) # intersection point with the retina
     i += 1 # just for the position matrix
     p[:,i] = myconvert(ray.pos) # add said position to the position matrix
