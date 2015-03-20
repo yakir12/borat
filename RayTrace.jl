@@ -126,7 +126,8 @@ function trace!(p::Array{Float64,2},lens::Lens,retina::Retina,L::Float64,n_mediu
             ray.pos -= lens.ε*ray.dir-lens.c # correct for the mistake of exiting the lens AND the lens center
             intersect!(ray,lens) # intersect with the lens
             p[:,i] = myconvert(ray.pos) # add position to the position matrix
-            diagnose[:Δ] = sqrt(sum((diagnose[:goal]-vec(p[:,i])).^2)) # find distance to the goal
+            #println(diagnose)
+            diagnose["Δ"] = sqrt(sum((diagnose["goal"]-vec(p[:,i])).^2)) # find distance to the goal
 
             break # and break the loop, cause we're done with the lens
         end # if the ray didn't exit the lens: 
@@ -137,7 +138,7 @@ function trace!(p::Array{Float64,2},lens::Lens,retina::Retina,L::Float64,n_mediu
     intersect!(ray,retina) # intersection point with the retina
     i += 1 # just for the position matrix
     p[:,i] = myconvert(ray.pos) # add said position to the position matrix
-    diagnose[:len] = i # and set the length of the ray refraction points in the positions matrix
+    diagnose["len"] = i # and set the length of the ray refraction points in the positions matrix
 end
 
 end
